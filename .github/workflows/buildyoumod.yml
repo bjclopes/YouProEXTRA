@@ -20,6 +20,12 @@ on:
         required: true
         type: string
 
+      youmod_ref:
+        description: "YouMod branch/tag to build (pre-release, main, v2.0.0...)"
+        default: "pre-release"
+        required: true
+        type: string
+
       opensafari:
         description: "Integrate Open in YouTube (Safari Extension)"
         default: true
@@ -134,7 +140,7 @@ jobs:
       - name: Hide Sensitive Inputs
         uses: levibostian/action-hide-sensitive-inputs@v1
         with:
-          exclude_inputs: bundle_id,display_name,youpip,ytuhd,ryd,ytabconfig,youquality,ytweaks,yougetcaption,demc,ytlowcontrastmode,youchoose,ythold,volumeboost,nativeshare,opensafari,pleasedontstopthemusic
+          exclude_inputs: bundle_id,display_name,youmod_ref,youpip,ytuhd,ryd,ytabconfig,youquality,ytweaks,yougetcaption,demc,ytlowcontrastmode,youchoose,ythold,volumeboost,nativeshare,opensafari,pleasedontstopthemusic
 
       - name: Download and Validate IPA
         env:
@@ -282,9 +288,17 @@ jobs:
           mv packages/*.deb ${{ github.workspace }}/ytvo.deb
 
       - name: Clone and Build YouMod
+        env:
+          YOUMOD_REF: ${{ inputs.youmod_ref }}
         run: |
-          git clone --quiet --depth=1 https://github.com/tonwalter888/youmod.git
+          git clone --quiet --depth=1 --branch "$YOUMOD_REF" https://github.com/Tonwalter888/YouMod.git youmod
           cd youmod
+          {
+            echo "YOUMOD_REF=$YOUMOD_REF"
+            echo "YOUMOD_SHA=$(git rev-parse --short=7 HEAD)"
+            echo "YOUMOD_FULL_SHA=$(git rev-parse HEAD)"
+            echo "YOUMOD_COMMIT_MSG=$(git log -1 --format=%s | tr -d '\r\n')"
+          } >> "$GITHUB_ENV"
           find Files -type f \( -name "*.h" -o -name "*.x" -o -name "*.m" \) -exec perl -pi -e 's/#import <roothide\.h>/#import <rootless.h>\n#define jbroot(path) ROOT_PATH_NS(path)/g' {} +
           if [ -f control ]; then ctl=control; else ctl=DEBIAN/control; fi
           version="$(grep '^Version:' "$ctl" | awk '{print $2}' | tr -d '\r\n' | tr -c 'A-Za-z0-9._+~-' '_')"
@@ -426,7 +440,7 @@ jobs:
               tweaks+=("$f")
             fi
           done
-          ipa_name="YouMod_${YT_VERSION}_${YOUMOD_VERSION}.ipa"
+          ipa_name="YouMod_${YT_VERSION}_${YOUMOD_VERSION}-${YOUMOD_SHA}.ipa"
           cyan -i youtube.ipa -o "$ipa_name" -uwesf "${tweaks[@]}" -n "$DISPLAY_NAME" -b "$BUNDLE_ID"
           echo "IPA_NAME=$ipa_name" >> "$GITHUB_ENV"
 
@@ -442,6 +456,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "${IPA_NAME%.ipa}" \
             --draft \
+            --notes "Built from Tonwalter888/YouMod branch ${YOUMOD_REF} at commit ${YOUMOD_SHA}: ${YOUMOD_COMMIT_MSG} (https://github.com/Tonwalter888/YouMod/commit/${YOUMOD_FULL_SHA})" \
             "$IPA_NAME"
 
       - name: Job Summary
